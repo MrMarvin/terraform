@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hashicorp/terraform/states"
+
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/tfdiags"
 )
@@ -12,10 +14,10 @@ import (
 // ImportState operation on a provider. This will return the imported
 // states but won't modify any actual state.
 type EvalImportState struct {
+	Addr     addrs.ResourceInstance
 	Provider *ResourceProvider
-	Info     *InstanceInfo
 	Id       string
-	Output   *[]*InstanceState
+	Output   *[]*states.ImportedObject
 }
 
 // TODO: test

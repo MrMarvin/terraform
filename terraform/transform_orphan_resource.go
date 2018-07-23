@@ -3,6 +3,7 @@ package terraform
 import (
 	"github.com/hashicorp/terraform/configs"
 	"github.com/hashicorp/terraform/dag"
+	"github.com/hashicorp/terraform/states"
 )
 
 // OrphanResourceTransformer is a GraphTransformer that adds resource
@@ -16,7 +17,7 @@ type OrphanResourceTransformer struct {
 
 	// State is the global state. We require the global state to
 	// properly find module orphans at our path.
-	State *State
+	State *states.State
 
 	// Config is the root node in the configuration tree. We'll look up
 	// the appropriate note in this tree using the path in each node.
@@ -40,30 +41,42 @@ func (t *OrphanResourceTransformer) Transform(g *Graph) error {
 	return nil
 }
 
-func (t *OrphanResourceTransformer) transform(g *Graph, ms *ModuleState) error {
+func (t *OrphanResourceTransformer) transform(g *Graph, ms *states.Module) error {
 	if ms == nil {
 		return nil
 	}
 
-	path := normalizeModulePath(ms.Path)
+	moduleAddr := ms.Addr
 
-	// Get the configuration for this path. The configuration might be
+	// Get the configuration for this module. The configuration might be
 	// nil if the module was removed from the configuration. This is okay,
 	// this just means that every resource is an orphan.
 	var m *configs.Module
-	if c := t.Config.DescendentForInstance(path); c != nil {
+	if c := t.Config.DescendentForInstance(moduleAddr); c != nil {
 		m = c.Module
 	}
 
-	// Go through the orphans and add them all to the state
-	for _, relAddr := range ms.Orphans(m) {
-		addr := relAddr.Absolute(path)
-		abstract := NewNodeAbstractResourceInstance(addr)
-		var node dag.Vertex = abstract
-		if f := t.Concrete; f != nil {
-			node = f(abstract)
+	// An "orphan" is a resource that is in the state but not the configuration,
+	// so we'll walk the state resources and try to correlate each of them
+	// with a configuration block. Each orphan gets a node in the graph whose
+	// type is decided by t.Concrete.
+	//
+	// We don't handle orphans related to changes in the "count" and "for_each"
+	// pseudo-arguments here. They are handled by OrphanResourceCountTransformer.
+	for _, rs := range ms.Resources {
+		if r := m.ResourceByAddr(rs.Addr); r != nil {
+			continue
 		}
-		g.Add(node)
+
+		for key, is := range rs.Instances {
+			addr := rs.Addr.Instance(key).Absolute(moduleAddr)
+			abstract := NewNodeAbstractResourceInstance(addr)
+			var node dag.Vertex = abstract
+			if f := t.Concrete; f != nil {
+				node = f(abstract)
+			}
+			g.Add(node)
+		}
 	}
 
 	return nil

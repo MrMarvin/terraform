@@ -3,11 +3,14 @@ package terraform
 import (
 	"fmt"
 
-	"github.com/hashicorp/terraform/tfdiags"
+	"github.com/hashicorp/terraform/states"
+
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs"
-	"github.com/zclconf/go-cty/cty"
+	"github.com/hashicorp/terraform/plans"
+	"github.com/hashicorp/terraform/tfdiags"
 )
 
 // EvalReadDataDiff is an EvalNode implementation that executes a data
@@ -18,13 +21,13 @@ type EvalReadDataDiff struct {
 	Provider       *ResourceProvider
 	ProviderSchema **ProviderSchema
 
-	Output      **InstanceDiff
+	Output      **plans.ResourceInstanceChange
 	OutputValue *cty.Value
-	OutputState **InstanceState
+	OutputState **states.ResourceInstanceObject
 
 	// Set Previous when re-evaluating diff during apply, to ensure that
 	// the "Destroy" flag is preserved.
-	Previous **InstanceDiff
+	Previous **plans.ResourceInstanceChange
 }
 
 func (n *EvalReadDataDiff) Eval(ctx EvalContext) (interface{}, error) {

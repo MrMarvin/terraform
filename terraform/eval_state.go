@@ -5,13 +5,16 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform/addrs"
+	"github.com/hashicorp/terraform/states"
 )
 
 // EvalReadState is an EvalNode implementation that reads the
 // primary InstanceState for a specific resource out of the state.
 type EvalReadState struct {
-	Name   string
-	Output **InstanceState
+	Name string
+
+	// Output will be written with a pointer to the retrieved object.
+	Output **states.ResourceInstanceObject
 }
 
 func (n *EvalReadState) Eval(ctx EvalContext) (interface{}, error) {
@@ -23,11 +26,13 @@ func (n *EvalReadState) Eval(ctx EvalContext) (interface{}, error) {
 // EvalReadStateDeposed is an EvalNode implementation that reads the
 // deposed InstanceState for a specific resource out of the state
 type EvalReadStateDeposed struct {
-	Name   string
-	Output **InstanceState
-	// Index indicates which instance in the Deposed list to target, or -1 for
-	// the last item.
-	Index int
+	Name string
+
+	// Key identifies which deposed object we will read.
+	Key states.DeposedKey
+
+	// Output will be written with a pointer to the retrieved object.
+	Output **states.ResourceInstanceObject
 }
 
 func (n *EvalReadStateDeposed) Eval(ctx EvalContext) (interface{}, error) {
@@ -87,9 +92,9 @@ func readInstanceFromState(
 }
 
 // EvalRequireState is an EvalNode implementation that early exits
-// if the state doesn't have an ID.
+// if the given object is null.
 type EvalRequireState struct {
-	State **InstanceState
+	State **states.ResourceInstanceObject
 }
 
 func (n *EvalRequireState) Eval(ctx EvalContext) (interface{}, error) {
@@ -135,7 +140,7 @@ type EvalWriteState struct {
 	ResourceType string
 	Provider     addrs.AbsProviderConfig
 	Dependencies []string
-	State        **InstanceState
+	State        **states.ResourceInstanceObject
 }
 
 func (n *EvalWriteState) Eval(ctx EvalContext) (interface{}, error) {
@@ -159,9 +164,16 @@ type EvalWriteStateDeposed struct {
 	ResourceType string
 	Provider     string
 	Dependencies []string
-	State        **InstanceState
-	// Index indicates which instance in the Deposed list to target, or -1 to append.
-	Index int
+	State        **states.ResourceInstanceObject
+
+	// Key indicates which deposed object to write to. If unset, a new
+	// key is generated, which is written into OutputKey.
+	Key states.DeposedKey
+
+	// OutputKey, if non-nil, will be written with the deposed object key that
+	// was generated for the object. This can then be passed to
+	// EvalUndeposeState.Key so it knows which deposed instance to remove.
+	OutputKey *states.DeposedKey
 }
 
 func (n *EvalWriteStateDeposed) Eval(ctx EvalContext) (interface{}, error) {
@@ -229,6 +241,11 @@ func writeInstanceToState(
 // the old state of the to-be-destroyed resource.
 type EvalDeposeState struct {
 	Name string
+
+	// OutputKey, if non-nil, will be written with the deposed object key that
+	// was generated for the object. This can then be passed to
+	// EvalUndeposeState.Key so it knows which deposed instance to remove.
+	OutputKey *states.DeposedKey
 }
 
 // TODO: test
@@ -263,11 +280,19 @@ func (n *EvalDeposeState) Eval(ctx EvalContext) (interface{}, error) {
 	return nil, nil
 }
 
-// EvalUndeposeState is an EvalNode implementation that reads the
-// InstanceState for a specific resource out of the state.
+// EvalUndeposeState is an EvalNode implementation that forgets a particular
+// deposed object from the state, causing Terraform to no longer track it.
+//
+// Users of this must ensure that the upstream object that the object was
+// tracking has been deleted in the remote system before this node is
+// evaluated.
 type EvalUndeposeState struct {
 	Name  string
-	State **InstanceState
+	State **states.ResourceInstanceObject
+
+	// Key is a pointer to the deposed object key that should be forgotten
+	// from the state.
+	Key *states.DeposedKey
 }
 
 // TODO: test

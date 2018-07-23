@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hashicorp/terraform/states/statemgr"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/terraform/backend"
 	"github.com/hashicorp/terraform/command/format"
@@ -23,10 +25,11 @@ func (b *Local) opApply(
 	log.Printf("[INFO] backend/local: starting Apply operation")
 
 	var diags tfdiags.Diagnostics
+	var err error
 
 	// If we have a nil module at this point, then set it to an empty tree
 	// to avoid any potential crashes.
-	if op.Plan == nil && !op.Destroy && !op.HasConfig() {
+	if op.PlanFile == nil && !op.Destroy && !op.HasConfig() {
 		diags = diags.Append(tfdiags.Sourceless(
 			tfdiags.Error,
 			"No configuration files",
@@ -47,9 +50,9 @@ func (b *Local) opApply(
 	b.ContextOpts.Hooks = append(b.ContextOpts.Hooks, countHook, stateHook)
 
 	// Get our context
-	tfCtx, opState, err := b.context(op)
-	if err != nil {
-		diags = diags.Append(err)
+	tfCtx, opState, contextDiags := b.context(op)
+	diags = diags.Append(contextDiags)
+	if contextDiags.HasErrors() {
 		b.ReportResult(runningOp, diags)
 		return
 	}
@@ -58,7 +61,7 @@ func (b *Local) opApply(
 	runningOp.State = tfCtx.State()
 
 	// If we weren't given a plan, then we refresh/plan
-	if op.Plan == nil {
+	if op.PlanFile == nil {
 		// If we're refreshing before apply, perform that
 		if op.PlanRefresh {
 			log.Printf("[INFO] backend/local: apply calling Refresh")
@@ -152,14 +155,8 @@ func (b *Local) opApply(
 
 	// Store the final state
 	runningOp.State = applyState
-
-	// Persist the state
-	if err := opState.WriteState(applyState); err != nil {
-		diags = diags.Append(b.backupStateForError(applyState, err))
-		b.ReportResult(runningOp, diags)
-		return
-	}
-	if err := opState.PersistState(); err != nil {
+	err = statemgr.WriteAndPersist(opState, applyState)
+	if err != nil {
 		diags = diags.Append(b.backupStateForError(applyState, err))
 		b.ReportResult(runningOp, diags)
 		return

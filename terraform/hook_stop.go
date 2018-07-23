@@ -2,6 +2,11 @@ package terraform
 
 import (
 	"sync/atomic"
+
+	"github.com/zclconf/go-cty/cty"
+
+	"github.com/hashicorp/terraform/addrs"
+	"github.com/hashicorp/terraform/states"
 )
 
 // stopHook is a private Hook implementation that Terraform uses to
@@ -10,58 +15,60 @@ type stopHook struct {
 	stop uint32
 }
 
-func (h *stopHook) PreApply(*InstanceInfo, *InstanceState, *InstanceDiff) (HookAction, error) {
+var _ Hook = (*stopHook)(nil)
+
+func (h *stopHook) PreApply(addr addrs.ResourceInstance, gen states.Generation, priorState, plannedNewState cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostApply(*InstanceInfo, *InstanceState, error) (HookAction, error) {
+func (h *stopHook) PostApply(addr addrs.ResourceInstance, gen states.Generation, newState cty.Value, err error) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PreDiff(*InstanceInfo, *InstanceState) (HookAction, error) {
+func (h *stopHook) PreDiff(addr addrs.ResourceInstance, priorState, proposedNewState cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostDiff(*InstanceInfo, *InstanceDiff) (HookAction, error) {
+func (h *stopHook) PostDiff(addr addrs.ResourceInstance, priorState, plannedNewState cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PreProvisionResource(*InstanceInfo, *InstanceState) (HookAction, error) {
+func (h *stopHook) PreProvisionInstance(addr addrs.ResourceInstance, state cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostProvisionResource(*InstanceInfo, *InstanceState) (HookAction, error) {
+func (h *stopHook) PostProvisionInstance(addr addrs.ResourceInstance, state cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PreProvision(*InstanceInfo, string) (HookAction, error) {
+func (h *stopHook) PreProvisionInstanceStep(addr addrs.ResourceInstance, typeName string) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostProvision(*InstanceInfo, string, error) (HookAction, error) {
+func (h *stopHook) PostProvisionInstanceStep(addr addrs.ResourceInstance, typeName string, err error) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) ProvisionOutput(*InstanceInfo, string, string) {
+func (h *stopHook) ProvisionOutput(addr addrs.ResourceInstance, typeName string, line string) {
 }
 
-func (h *stopHook) PreRefresh(*InstanceInfo, *InstanceState) (HookAction, error) {
+func (h *stopHook) PreRefresh(addr addrs.ResourceInstance, priorState cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostRefresh(*InstanceInfo, *InstanceState) (HookAction, error) {
+func (h *stopHook) PostRefresh(addr addrs.ResourceInstance, priorState cty.Value, newState cty.Value) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PreImportState(*InstanceInfo, string) (HookAction, error) {
+func (h *stopHook) PreImportState(addr addrs.ResourceInstance, importID string) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostImportState(*InstanceInfo, []*InstanceState) (HookAction, error) {
+func (h *stopHook) PostImportState(addr addrs.ResourceInstance, imported []*states.ImportedObject) (HookAction, error) {
 	return h.hook()
 }
 
-func (h *stopHook) PostStateUpdate(*State) (HookAction, error) {
+func (h *stopHook) PostStateUpdate(new *states.State) (HookAction, error) {
 	return h.hook()
 }
 

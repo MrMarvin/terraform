@@ -11,8 +11,8 @@ import (
 
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs"
-	"github.com/hashicorp/terraform/tfdiags"
-	"github.com/hashicorp/terraform/version"
+	"github.com/hashicorp/terraform/plans"
+	"github.com/hashicorp/terraform/states"
 )
 
 // EvalCompareDiff is an EvalNode implementation that compares two diffs
@@ -24,53 +24,56 @@ type EvalCompareDiff struct {
 
 // TODO: test
 func (n *EvalCompareDiff) Eval(ctx EvalContext) (interface{}, error) {
-	one, two := *n.One, *n.Two
+	return nil, fmt.Errorf("TODO: Replace EvalCompareDiff with EvalCheckPlannedState")
+	/*
+		one, two := *n.One, *n.Two
 
-	// If either are nil, let them be empty
-	if one == nil {
-		one = new(InstanceDiff)
-		one.init()
-	}
-	if two == nil {
-		two = new(InstanceDiff)
-		two.init()
-	}
-	oneId, _ := one.GetAttribute("id")
-	twoId, _ := two.GetAttribute("id")
-	one.DelAttribute("id")
-	two.DelAttribute("id")
-	defer func() {
-		if oneId != nil {
-			one.SetAttribute("id", oneId)
+		// If either are nil, let them be empty
+		if one == nil {
+			one = new(InstanceDiff)
+			one.init()
 		}
-		if twoId != nil {
-			two.SetAttribute("id", twoId)
+		if two == nil {
+			two = new(InstanceDiff)
+			two.init()
 		}
-	}()
+		oneId, _ := one.GetAttribute("id")
+		twoId, _ := two.GetAttribute("id")
+		one.DelAttribute("id")
+		two.DelAttribute("id")
+		defer func() {
+			if oneId != nil {
+				one.SetAttribute("id", oneId)
+			}
+			if twoId != nil {
+				two.SetAttribute("id", twoId)
+			}
+		}()
 
-	if same, reason := one.Same(two); !same {
-		log.Printf("[ERROR] %s: diffs didn't match", n.Addr)
-		log.Printf("[ERROR] %s: reason: %s", n.Addr, reason)
-		log.Printf("[ERROR] %s: diff one: %#v", n.Addr, one)
-		log.Printf("[ERROR] %s: diff two: %#v", n.Addr, two)
-		return nil, fmt.Errorf(
-			"%s: diffs didn't match during apply. This is a bug with "+
-				"Terraform and should be reported as a GitHub Issue.\n"+
-				"\n"+
-				"Please include the following information in your report:\n"+
-				"\n"+
-				"    Terraform Version: %s\n"+
-				"    Resource ID: %s\n"+
-				"    Mismatch reason: %s\n"+
-				"    Diff One (usually from plan): %#v\n"+
-				"    Diff Two (usually from apply): %#v\n"+
-				"\n"+
-				"Also include as much context as you can about your config, state, "+
-				"and the steps you performed to trigger this error.\n",
-			n.Addr, version.Version, n.Addr, reason, one, two)
-	}
+		if same, reason := one.Same(two); !same {
+			log.Printf("[ERROR] %s: diffs didn't match", n.Addr)
+			log.Printf("[ERROR] %s: reason: %s", n.Addr, reason)
+			log.Printf("[ERROR] %s: diff one: %#v", n.Addr, one)
+			log.Printf("[ERROR] %s: diff two: %#v", n.Addr, two)
+			return nil, fmt.Errorf(
+				"%s: diffs didn't match during apply. This is a bug with "+
+					"Terraform and should be reported as a GitHub Issue.\n"+
+					"\n"+
+					"Please include the following information in your report:\n"+
+					"\n"+
+					"    Terraform Version: %s\n"+
+					"    Resource ID: %s\n"+
+					"    Mismatch reason: %s\n"+
+					"    Diff One (usually from plan): %#v\n"+
+					"    Diff Two (usually from apply): %#v\n"+
+					"\n"+
+					"Also include as much context as you can about your config, state, "+
+					"and the steps you performed to trigger this error.\n",
+				n.Addr, version.Version, n.Addr, reason, one, two)
+		}
 
-	return nil, nil
+		return nil, nil
+	*/
 }
 
 // EvalDiff is an EvalNode implementation that does a refresh for
@@ -80,152 +83,155 @@ type EvalDiff struct {
 	Config         *configs.Resource
 	Provider       *ResourceProvider
 	ProviderSchema **ProviderSchema
-	State          **InstanceState
-	PreviousDiff   **InstanceDiff
+	State          **states.ResourceInstanceObject
+	PreviousDiff   **plans.ResourceInstanceChange
 
-	OutputDiff  **InstanceDiff
+	OutputDiff  **plans.ResourceInstanceChange
 	OutputValue *cty.Value
-	OutputState **InstanceState
+	OutputState **states.ResourceInstanceObject
 
 	Stub bool
 }
 
 // TODO: test
 func (n *EvalDiff) Eval(ctx EvalContext) (interface{}, error) {
-	state := *n.State
-	config := *n.Config
-	provider := *n.Provider
-	providerSchema := *n.ProviderSchema
+	return nil, fmt.Errorf("EvalDiff not yet updated for new state and plan types")
+	/*
+		state := *n.State
+		config := *n.Config
+		provider := *n.Provider
+		providerSchema := *n.ProviderSchema
 
-	if providerSchema == nil {
-		return nil, fmt.Errorf("provider schema is unavailable for %s", n.Addr)
-	}
+		if providerSchema == nil {
+			return nil, fmt.Errorf("provider schema is unavailable for %s", n.Addr)
+		}
 
-	var diags tfdiags.Diagnostics
+		var diags tfdiags.Diagnostics
 
-	// The provider and hook APIs still expect our legacy InstanceInfo type.
-	legacyInfo := NewInstanceInfo(n.Addr.Absolute(ctx.Path()))
+		// The provider and hook APIs still expect our legacy InstanceInfo type.
+		legacyInfo := NewInstanceInfo(n.Addr.Absolute(ctx.Path()))
 
-	// State still uses legacy-style internal ids, so we need to shim to get
-	// a suitable key to use.
-	stateId := NewLegacyResourceInstanceAddress(n.Addr.Absolute(ctx.Path())).stateId()
+		// State still uses legacy-style internal ids, so we need to shim to get
+		// a suitable key to use.
+		stateId := NewLegacyResourceInstanceAddress(n.Addr.Absolute(ctx.Path())).stateId()
 
-	// Call pre-diff hook
-	if !n.Stub {
-		err := ctx.Hook(func(h Hook) (HookAction, error) {
-			return h.PreDiff(legacyInfo, state)
+		// Call pre-diff hook
+		if !n.Stub {
+			err := ctx.Hook(func(h Hook) (HookAction, error) {
+				return h.PreDiff(legacyInfo, state)
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// The state for the diff must never be nil
+		diffState := state
+		if diffState == nil {
+			diffState = new(InstanceState)
+		}
+		diffState.init()
+
+		// Evaluate the configuration
+		schema := providerSchema.ResourceTypes[n.Addr.Resource.Type]
+		if schema == nil {
+			// Should be caught during validation, so we don't bother with a pretty error here
+			return nil, fmt.Errorf("provider does not support resource type %q", n.Addr.Resource.Type)
+		}
+		keyData := EvalDataForInstanceKey(n.Addr.Key)
+		configVal, _, configDiags := ctx.EvaluateBlock(config.Config, schema, nil, keyData)
+		diags = diags.Append(configDiags)
+		if configDiags.HasErrors() {
+			return nil, diags.Err()
+		}
+
+		// The provider API still expects our legacy ResourceConfig type.
+		legacyRC := NewResourceConfigShimmed(configVal, schema)
+
+		// Diff!
+		diff, err := provider.Diff(legacyInfo, diffState, legacyRC)
+		if err != nil {
+			return nil, err
+		}
+		if diff == nil {
+			diff = new(InstanceDiff)
+		}
+
+		// Set DestroyDeposed if we have deposed instances
+		_, err = readInstanceFromState(ctx, stateId, nil, func(rs *ResourceState) (*InstanceState, error) {
+			if len(rs.Deposed) > 0 {
+				diff.DestroyDeposed = true
+			}
+
+			return nil, nil
 		})
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	// The state for the diff must never be nil
-	diffState := state
-	if diffState == nil {
-		diffState = new(InstanceState)
-	}
-	diffState.init()
+		// Preserve the DestroyTainted flag
+		if n.PreviousDiff != nil {
+			diff.SetTainted((*n.PreviousDiff).GetDestroyTainted())
+		}
 
-	// Evaluate the configuration
-	schema := providerSchema.ResourceTypes[n.Addr.Resource.Type]
-	if schema == nil {
-		// Should be caught during validation, so we don't bother with a pretty error here
-		return nil, fmt.Errorf("provider does not support resource type %q", n.Addr.Resource.Type)
-	}
-	keyData := EvalDataForInstanceKey(n.Addr.Key)
-	configVal, _, configDiags := ctx.EvaluateBlock(config.Config, schema, nil, keyData)
-	diags = diags.Append(configDiags)
-	if configDiags.HasErrors() {
-		return nil, diags.Err()
-	}
+		// Require a destroy if there is an ID and it requires new.
+		if diff.RequiresNew() && state != nil && state.ID != "" {
+			diff.SetDestroy(true)
+		}
 
-	// The provider API still expects our legacy ResourceConfig type.
-	legacyRC := NewResourceConfigShimmed(configVal, schema)
+		// If we're creating a new resource, compute its ID
+		if diff.RequiresNew() || state == nil || state.ID == "" {
+			var oldID string
+			if state != nil {
+				oldID = state.Attributes["id"]
+			}
 
-	// Diff!
-	diff, err := provider.Diff(legacyInfo, diffState, legacyRC)
-	if err != nil {
-		return nil, err
-	}
-	if diff == nil {
-		diff = new(InstanceDiff)
-	}
+			// Add diff to compute new ID
+			diff.init()
+			diff.SetAttribute("id", &ResourceAttrDiff{
+				Old:         oldID,
+				NewComputed: true,
+				RequiresNew: true,
+				Type:        DiffAttrOutput,
+			})
+		}
 
-	// Set DestroyDeposed if we have deposed instances
-	_, err = readInstanceFromState(ctx, stateId, nil, func(rs *ResourceState) (*InstanceState, error) {
-		if len(rs.Deposed) > 0 {
-			diff.DestroyDeposed = true
+		// filter out ignored attributes
+		if err := n.processIgnoreChanges(diff); err != nil {
+			return nil, err
+		}
+
+		// Call post-refresh hook
+		if !n.Stub {
+			err = ctx.Hook(func(h Hook) (HookAction, error) {
+				return h.PostDiff(legacyInfo, diff)
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Update our output if we care
+		if n.OutputDiff != nil {
+			*n.OutputDiff = diff
+		}
+
+		if n.OutputValue != nil {
+			*n.OutputValue = configVal
+		}
+
+		// Update the state if we care
+		if n.OutputState != nil {
+			*n.OutputState = state
+
+			// Merge our state so that the state is updated with our plan
+			if !diff.Empty() && n.OutputState != nil {
+				*n.OutputState = state.MergeDiff(diff)
+			}
 		}
 
 		return nil, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Preserve the DestroyTainted flag
-	if n.PreviousDiff != nil {
-		diff.SetTainted((*n.PreviousDiff).GetDestroyTainted())
-	}
-
-	// Require a destroy if there is an ID and it requires new.
-	if diff.RequiresNew() && state != nil && state.ID != "" {
-		diff.SetDestroy(true)
-	}
-
-	// If we're creating a new resource, compute its ID
-	if diff.RequiresNew() || state == nil || state.ID == "" {
-		var oldID string
-		if state != nil {
-			oldID = state.Attributes["id"]
-		}
-
-		// Add diff to compute new ID
-		diff.init()
-		diff.SetAttribute("id", &ResourceAttrDiff{
-			Old:         oldID,
-			NewComputed: true,
-			RequiresNew: true,
-			Type:        DiffAttrOutput,
-		})
-	}
-
-	// filter out ignored attributes
-	if err := n.processIgnoreChanges(diff); err != nil {
-		return nil, err
-	}
-
-	// Call post-refresh hook
-	if !n.Stub {
-		err = ctx.Hook(func(h Hook) (HookAction, error) {
-			return h.PostDiff(legacyInfo, diff)
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Update our output if we care
-	if n.OutputDiff != nil {
-		*n.OutputDiff = diff
-	}
-
-	if n.OutputValue != nil {
-		*n.OutputValue = configVal
-	}
-
-	// Update the state if we care
-	if n.OutputState != nil {
-		*n.OutputState = state
-
-		// Merge our state so that the state is updated with our plan
-		if !diff.Empty() && n.OutputState != nil {
-			*n.OutputState = state.MergeDiff(diff)
-		}
-	}
-
-	return nil, nil
+	*/
 }
 
 func (n *EvalDiff) processIgnoreChanges(diff *InstanceDiff) error {
@@ -426,9 +432,9 @@ func groupContainers(d *InstanceDiff) map[string]flatAttrDiff {
 // destroy diff.
 type EvalDiffDestroy struct {
 	Addr        addrs.ResourceInstance
-	State       **InstanceState
-	Output      **InstanceDiff
-	OutputState **InstanceState
+	State       **states.ResourceInstanceObject
+	Output      **plans.ResourceInstanceChange
+	OutputState **states.ResourceInstanceObject
 }
 
 // TODO: test
@@ -481,28 +487,31 @@ type EvalDiffDestroyModule struct {
 
 // TODO: test
 func (n *EvalDiffDestroyModule) Eval(ctx EvalContext) (interface{}, error) {
-	diff, lock := ctx.Diff()
+	return nil, fmt.Errorf("EvalDiffDestroyModule not yet updated for new plan types")
+	/*
+		diff, lock := ctx.Diff()
 
-	// Acquire the lock so that we can do this safely concurrently
-	lock.Lock()
-	defer lock.Unlock()
+		// Acquire the lock so that we can do this safely concurrently
+		lock.Lock()
+		defer lock.Unlock()
 
-	// Write the diff
-	modDiff := diff.ModuleByPath(n.Path)
-	if modDiff == nil {
-		modDiff = diff.AddModule(n.Path)
-	}
-	modDiff.Destroy = true
+		// Write the diff
+		modDiff := diff.ModuleByPath(n.Path)
+		if modDiff == nil {
+			modDiff = diff.AddModule(n.Path)
+		}
+		modDiff.Destroy = true
 
-	return nil, nil
+		return nil, nil
+	*/
 }
 
 // EvalFilterDiff is an EvalNode implementation that filters the diff
 // according to some filter.
 type EvalFilterDiff struct {
 	// Input and output
-	Diff   **InstanceDiff
-	Output **InstanceDiff
+	Diff   **plans.ResourceInstanceChange
+	Output **plans.ResourceInstanceChange
 
 	// Destroy, if true, will only include a destroy diff if it is set.
 	Destroy bool
@@ -533,61 +542,67 @@ func (n *EvalFilterDiff) Eval(ctx EvalContext) (interface{}, error) {
 // the full diff.
 type EvalReadDiff struct {
 	Name string
-	Diff **InstanceDiff
+	Diff **plans.ResourceInstanceChange
 }
 
 func (n *EvalReadDiff) Eval(ctx EvalContext) (interface{}, error) {
-	diff, lock := ctx.Diff()
+	return nil, fmt.Errorf("EvalReadDiff not yet updated for new plan types")
+	/*
+		diff, lock := ctx.Diff()
 
-	// Acquire the lock so that we can do this safely concurrently
-	lock.Lock()
-	defer lock.Unlock()
+		// Acquire the lock so that we can do this safely concurrently
+		lock.Lock()
+		defer lock.Unlock()
 
-	// Write the diff
-	modDiff := diff.ModuleByPath(ctx.Path())
-	if modDiff == nil {
+		// Write the diff
+		modDiff := diff.ModuleByPath(ctx.Path())
+		if modDiff == nil {
+			return nil, nil
+		}
+
+		*n.Diff = modDiff.Resources[n.Name]
+
 		return nil, nil
-	}
-
-	*n.Diff = modDiff.Resources[n.Name]
-
-	return nil, nil
+	*/
 }
 
 // EvalWriteDiff is an EvalNode implementation that writes the diff to
 // the full diff.
 type EvalWriteDiff struct {
 	Name string
-	Diff **InstanceDiff
+	Diff **plans.ResourceInstanceChange
 }
 
 // TODO: test
 func (n *EvalWriteDiff) Eval(ctx EvalContext) (interface{}, error) {
-	diff, lock := ctx.Diff()
+	return nil, fmt.Errorf("EvalWriteDiff not yet updated for new plan types")
+	/*
+		diff, lock := ctx.Diff()
 
-	// The diff to write, if its empty it should write nil
-	var diffVal *InstanceDiff
-	if n.Diff != nil {
-		diffVal = *n.Diff
-	}
-	if diffVal.Empty() {
-		diffVal = nil
-	}
+		// The diff to write, if its empty it should write nil
+		var diffVal *InstanceDiff
+		if n.Diff != nil {
+			diffVal = *n.Diff
+		}
+		if diffVal.Empty() {
+			diffVal = nil
+		}
 
-	// Acquire the lock so that we can do this safely concurrently
-	lock.Lock()
-	defer lock.Unlock()
+		// Acquire the lock so that we can do this safely concurrently
+		lock.Lock()
+		defer lock.Unlock()
 
-	// Write the diff
-	modDiff := diff.ModuleByPath(ctx.Path())
-	if modDiff == nil {
-		modDiff = diff.AddModule(ctx.Path())
-	}
-	if diffVal != nil {
-		modDiff.Resources[n.Name] = diffVal
-	} else {
-		delete(modDiff.Resources, n.Name)
-	}
+		// Write the diff
+		modDiff := diff.ModuleByPath(ctx.Path())
+		if modDiff == nil {
+			modDiff = diff.AddModule(ctx.Path())
+		}
+		if diffVal != nil {
+			modDiff.Resources[n.Name] = diffVal
+		} else {
+			delete(modDiff.Resources, n.Name)
+		}
 
-	return nil, nil
+		return nil, nil
+	*/
 }

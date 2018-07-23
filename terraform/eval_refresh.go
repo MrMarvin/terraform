@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform/addrs"
+	"github.com/hashicorp/terraform/states"
 )
 
 // EvalRefresh is an EvalNode implementation that does a refresh for
@@ -12,8 +13,8 @@ import (
 type EvalRefresh struct {
 	Addr     addrs.ResourceInstance
 	Provider *ResourceProvider
-	State    **InstanceState
-	Output   **InstanceState
+	State    **states.ResourceInstanceObject
+	Output   **states.ResourceInstanceObject
 }
 
 // TODO: test

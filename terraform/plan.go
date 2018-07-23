@@ -6,17 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 
-	"github.com/hashicorp/hcl2/hcl"
-	"github.com/hashicorp/hcl2/hcl/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 
-	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs"
-	"github.com/hashicorp/terraform/tfdiags"
-	"github.com/hashicorp/terraform/version"
 )
 
 func init() {
@@ -82,88 +76,6 @@ type Plan struct {
 	Destroy bool
 
 	once sync.Once
-}
-
-// Context returns a Context with the data encapsulated in this plan.
-//
-// The following fields in opts are overridden by the plan: Config,
-// Diff, Variables.
-//
-// If State is not provided, it is set from the plan. If it _is_ provided,
-// it must be Equal to the state stored in plan, but may have a newer
-// serial.
-func (p *Plan) Context(opts *ContextOpts) (*Context, tfdiags.Diagnostics) {
-	var err error
-	opts, err = p.contextOpts(opts)
-	if err != nil {
-		var diags tfdiags.Diagnostics
-		diags = diags.Append(err)
-		return nil, diags
-	}
-	return NewContext(opts)
-}
-
-// contextOpts mutates the given base ContextOpts in place to use input
-// objects obtained from the receiving plan.
-func (p *Plan) contextOpts(base *ContextOpts) (*ContextOpts, error) {
-	opts := base
-
-	opts.Diff = p.Diff
-	opts.Config = p.Config
-	opts.ProviderSHA256s = p.ProviderSHA256s
-	opts.Destroy = p.Destroy
-
-	if len(p.Targets) != 0 {
-		// We're still using target strings in the Plan struct, so we need to
-		// convert to our address representation here.
-		// FIXME: Change the Plan struct to use addrs.Targetable itself, and
-		// then handle these conversions when we read/write plans on disk.
-		targets := make([]addrs.Targetable, len(p.Targets))
-		for i, targetStr := range p.Targets {
-			traversal, travDiags := hclsyntax.ParseTraversalAbs([]byte(targetStr), "", hcl.Pos{})
-			if travDiags.HasErrors() {
-				return nil, travDiags
-			}
-			target, targDiags := addrs.ParseTarget(traversal)
-			if targDiags.HasErrors() {
-				return nil, targDiags.Err()
-			}
-			targets[i] = target.Subject
-		}
-		opts.Targets = targets
-	}
-
-	if opts.State == nil {
-		opts.State = p.State
-	} else if !opts.State.Equal(p.State) {
-		// Even if we're overriding the state, it should be logically equal
-		// to what's in plan. The only valid change to have made by the time
-		// we get here is to have incremented the serial.
-		//
-		// Due to the fact that serialization may change the representation of
-		// the state, there is little chance that these aren't actually equal.
-		// Log the error condition for reference, but continue with the state
-		// we have.
-		log.Println("[WARN] Plan state and ContextOpts state are not equal")
-	}
-
-	thisVersion := version.String()
-	if p.TerraformVersion != "" && p.TerraformVersion != thisVersion {
-		return nil, fmt.Errorf(
-			"plan was created with a different version of Terraform (created with %s, but running %s)",
-			p.TerraformVersion, thisVersion,
-		)
-	}
-
-	opts.Variables = make(InputValues)
-	for k, v := range p.Vars {
-		opts.Variables[k] = &InputValue{
-			Value:      v,
-			SourceType: ValueFromPlan,
-		}
-	}
-
-	return opts, nil
 }
 
 func (p *Plan) String() string {

@@ -1,13 +1,22 @@
 package terraform
 
 import (
+	"fmt"
+	"log"
+
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs"
+	"github.com/hashicorp/terraform/states"
 )
 
 // NodeDestroyResource represents a resource that is to be destroyed.
 type NodeDestroyResourceInstance struct {
 	*NodeAbstractResourceInstance
+
+	// If DeposedKey is set to anything other than states.NotDeposed then
+	// this node destroys a deposed object of the associated instance
+	// rather than its current object.
+	DeposedKey states.DeposedKey
 
 	CreateBeforeDestroyOverride *bool
 }
@@ -108,9 +117,14 @@ func (n *NodeDestroyResourceInstance) DynamicExpand(ctx EvalContext) (*Graph, er
 	// stateId is the legacy-style ID to put into the state
 	stateId := NewLegacyResourceInstanceAddress(n.ResourceInstanceAddr()).stateId()
 
-	state, lock := ctx.State()
-	lock.RLock()
-	defer lock.RUnlock()
+	if n.DeposedKey != states.NotDeposed {
+		return nil, fmt.Errorf("NodeDestroyResourceInstance not yet updated to deal with explicit DeposedKey")
+	}
+
+	// Our graph transformers require direct access to read the entire state
+	// structure, so we'll lock the whole state for the duration of this work.
+	state := ctx.State().Lock()
+	defer ctx.State().Unlock()
 
 	// Start creating the steps
 	steps := make([]GraphTransformer, 0, 5)
@@ -148,10 +162,12 @@ func (n *NodeDestroyResourceInstance) EvalTree() EvalNode {
 
 	// Get our state
 	rs := n.ResourceState
-	if rs == nil {
-		rs = &ResourceState{
-			Provider: n.ResolvedProvider.String(),
-		}
+	var is *states.ResourceInstance
+	if rs != nil {
+		is = rs.Instance(n.InstanceKey)
+	}
+	if is == nil {
+		log.Printf("[WARN] NodeDestroyResourceInstance for %s with no state", addr)
 	}
 
 	var diffApply *InstanceDiff

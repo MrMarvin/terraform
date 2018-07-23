@@ -35,10 +35,7 @@ func (h *CountHook) Reset() {
 	h.Removed = 0
 }
 
-func (h *CountHook) PreApply(
-	n *terraform.InstanceInfo,
-	s *terraform.InstanceState,
-	d *terraform.InstanceDiff) (terraform.HookAction, error) {
+func (h *CountHook) PreApply(addr addrs.ResourceInstance, gen states.Generation, priorState, plannedNewState cty.Value) (terraform.HookAction, error) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -62,10 +59,7 @@ func (h *CountHook) PreApply(
 	return terraform.HookActionContinue, nil
 }
 
-func (h *CountHook) PostApply(
-	n *terraform.InstanceInfo,
-	s *terraform.InstanceState,
-	e error) (terraform.HookAction, error) {
+func (h *CountHook) PostApply(addr addrs.ResourceInstance, gen states.Generation, newState cty.Value, err error) (terraform.HookAction, error) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -89,9 +83,7 @@ func (h *CountHook) PostApply(
 	return terraform.HookActionContinue, nil
 }
 
-func (h *CountHook) PostDiff(
-	n *terraform.InstanceInfo, d *terraform.InstanceDiff) (
-	terraform.HookAction, error) {
+func (h *CountHook) PostDiff(addr addrs.ResourceInstance, priorState, plannedNewState cty.Value) (terraform.HookAction, error) {
 	h.Lock()
 	defer h.Unlock()
 
